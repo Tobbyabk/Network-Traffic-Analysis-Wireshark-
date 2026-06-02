@@ -1,6 +1,6 @@
 ## Objective
 
-This project demonstrates hands-on network traffic analysis using Wireshark in a controlled lab environment. The primary goal was to capture, filter, and interpret live and simulated network traffic across key protocols — DNS, DHCP, HTTP, and HTTPS — to identify normal baseline behaviour, detect anomalies, and recognise indicators of malicious activity. This exercise strengthens core SOC analyst skills by bridging the gap between raw packet data and actionable security insights.
+This project demonstrates hands-on network traffic analysis using Wireshark in a controlled lab environment. The primary goal was to filter and interpret captured traffic across key protocols — DNS, HTTP, and HTTPS — to identify normal baseline behaviour, detect anomalies, and recognise indicators of malicious activity. This exercise strengthens core SOC analyst skills by bridging the gap between raw packet data and actionable security insights.
 
 ---
 
@@ -35,7 +35,7 @@ This investigation was carried out in a virtual environment using TryHackMe plat
 
 ###  Setting Up Wireshark for packet analysis
 
-Launch Wireshark and navigate to File Menuu, Click on open and select the PCAP file[DNS.pcap]. At this stage, all captured traffic will open and the lab is ready for analysis
+Launch Wireshark and navigate to File Menu, Click on open and select the PCAP file[DNS.pcap]. At this stage, all captured traffic will open and the lab is ready for analysis
 
 <img width="1286" height="751" alt="Screenshot 2026-06-02 at 13 15 15" src="https://github.com/user-attachments/assets/ec7cc12b-33c7-4e6d-9a39-6a5b7d71441a" />
 
@@ -47,71 +47,45 @@ Launch Wireshark and navigate to File Menuu, Click on open and select the PCAP f
 
 ###  DNS Traffic Analysis
 
-**What is DNS?**
 DNS (Domain Name System) translates human-readable domain names (e.g. `google.com`) into IP addresses. Every website visit, email, and many malware callbacks start with a DNS query. DNS is a critical protocol for SOC analysts because it can reveal suspicious domain lookups, command-and-control (C2) beaconing, and data exfiltration attempts.
-
-**Generating DNS traffic:**
-Open Command Prompt on the Windows VM and run:
-```
-nslookup google.com
-nslookup suspicious-domain.xyz
-nslookup microsoft.com
-```
 
 **Wireshark filter to isolate DNS:**
 ```
 dns
 ```
+After applying dns as filter, the number of displayed packet reduced to 30370 as depicted in the Image 3 below
+
+<img width="1286" height="751" alt="Screenshot 2026-06-02 at 13 21 32" src="https://github.com/user-attachments/assets/2c17e0a3-57dc-43ed-bf17-e0c2f2d2e98a" />
+
+> **Image 3:** *(Screenshot — Wireshark window showing apllied dns filter)*
+>
+
+
+
+DNS attacks typically flare up right after malware hits a system or a vulnerability gets exploited. Once inside, an attacker sets up a domain name to act as their Command and Control (C2) server.The malware then starts sending DNS queries to this server which is known as "DNS Tunnelling". These requests look strange and they are much longer than normal DNS queries and target weird subdomains
 
 **What to look for:**
-- **Query (Type A)** — client asking for an IP address for a domain
-- **Response** — server returning the resolved IP
 - **High query volume** to a single domain — potential DNS tunnelling or beaconing
-- **NXDOMAIN responses** — domain does not exist — could indicate malware trying to reach a C2 server
-- **Long subdomain strings** — potential DNS exfiltration (e.g. `verylongbase64string.maliciousdomain.com`)
+- **Long subdomain strings** — potential DNS exfiltration
+Firstly, I applied (dns contains "dnscat") as my filter because "dnscat" is a tool used to create an encrypted command-and-control (C&C) channel over the DNS protocol. I wanted to confirm if some dns queries were encoded and I got some hits after appying the filter as shown in Image 4.
 
-> **Ref 2:** *(Screenshot — Wireshark DNS filter applied, showing query and response packets with domain names visible in the Info column)*
+<img width="1286" height="751" alt="Screenshot 2026-06-02 at 13 55 12" src="https://github.com/user-attachments/assets/55e072ad-e24d-4d8a-ae3f-1cbce1ceb634" />
 
-> **Ref 3:** *(Screenshot — DNS packet expanded in the packet details pane showing Query Name, Query Type A, and resolved IP address in the Answers section)*
+> **Image 4:** *(Screenshot — DNS packet expanded in the packet details pane showing Query Name with dnscat)*
+>
 
-**SOC relevance:** Unusual DNS queries — especially to newly registered domains, domains with random-looking names, or excessive NXDOMAIN responses — are a primary indicator of malware activity and should be escalated for further investigation.
+Then, I decided to use another filter (dns.qry.name.len > 200 and !mdns) to confirm it there was any long subdomain strings present as shown in Image 5. This filter will help isolate any query with a length over 200 and !mds will  Disable local link device queries in order to remove noise from the packets. After inpecting several packet details, a pattern of weird long subdomain strings was noticed and the main domain name of the attacker discovered was dataexfil[.]com.
+
+<img width="1286" height="751" alt="Screenshot 2026-06-02 at 14 09 11" src="https://github.com/user-attachments/assets/471d5249-7796-4faa-a7e6-5c0e530f621d" />
+
+> **Image 5:** *(Screenshot — DNS packet expanded in the packet details pane showing Query Name with the main domain name)*
+>
+
+
+
+**SOC relevance:** Unusual DNS queries  —  Long DNS addresses with encoded subdomain addresses is a primary indicator of dns tunnelling and should be escalated for further investigation.
 
 ---
-
-### Step 3 — DHCP Traffic Analysis
-
-**What is DHCP?**
-DHCP (Dynamic Host Configuration Protocol) automatically assigns IP addresses to devices on a network. A typical DHCP exchange follows a four-step process known as **DORA**: Discover → Offer → Request → Acknowledge.
-
-**Generating DHCP traffic:**
-On the Windows VM, open Command Prompt as Administrator and run:
-```
-ipconfig /release
-ipconfig /renew
-```
-
-**Wireshark filter to isolate DHCP:**
-```
-dhcp
-```
-or for older Wireshark versions:
-```
-bootp
-```
-
-**What to look for:**
-- **DHCP Discover** — client broadcasting to find a DHCP server (source: `0.0.0.0`, destination: `255.255.255.255`)
-- **DHCP Offer** — server responding with an available IP address
-- **DHCP Request** — client formally requesting the offered IP
-- **DHCP Acknowledge** — server confirming the IP lease
-- **Multiple DHCP Offers** from different sources — potential **rogue DHCP server** attack
-- **DHCP starvation** — large number of Discover packets from the same MAC — attacker attempting to exhaust the IP address pool
-
-> **Ref 4:** *(Screenshot — Wireshark DHCP filter showing the four-packet DORA sequence — Discover, Offer, Request, Acknowledge — with source and destination IP addresses visible)*
-
-> **Ref 5:** *(Screenshot — DHCP Acknowledge packet expanded showing assigned IP address, subnet mask, default gateway, lease time, and DNS server in the packet details pane)*
-
-**SOC relevance:** A rogue DHCP server on the network can redirect traffic through an attacker-controlled gateway, enabling man-in-the-middle attacks. Multiple Discover packets from a single MAC address in rapid succession indicate a DHCP starvation attempt.
 
 ---
 
