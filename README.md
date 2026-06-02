@@ -25,28 +25,27 @@ This project demonstrates hands-on network traffic analysis using Wireshark in a
 ---
 
 ## Lab Setup
-This investigation was carried out in a virtual environment using TryHackMe platform. The VM was launched on on TryHackMe and it took about 2 minutes for it to spin up. The capture packet required for this investigation was already provided in the VM and there was no need for a live-traffic capture. The Ubuntu version of the VM and the PCAP file are depicted below on the left and right side of the screenshot respectively.
+This investigation was carried out in a virtual environment using TryHackMe platform. The VM was launched on on TryHackMe and it took about 2 minutes for it to spin up. The capture packet required for this investigation was already provided in the VM and there was no need for a live-traffic capture. The Ubuntu version of the VM and the PCAP file are depicted in [Image 1] on the left and right side of the screenshot respectively.
+
+<img width="1286" height="751" alt="Screenshot 2026-06-02 at 12 08 47" src="https://github.com/user-attachments/assets/3edbb014-525e-4f6d-bf39-3ca0c4011fd6" />
+
+> **Image 1 :** *(Screenshot — Ubuntu Version and PCAP files)*
 
 
 
-## Steps
+###  Setting Up Wireshark for packet analysis
+
+Launch Wireshark and navigate to File Menuu, Click on open and select the PCAP file[DNS.pcap]. At this stage, all captured traffic will open and the lab is ready for analysis
+
+<img width="1286" height="751" alt="Screenshot 2026-06-02 at 13 15 15" src="https://github.com/user-attachments/assets/ec7cc12b-33c7-4e6d-9a39-6a5b7d71441a" />
+
+
+> **Image 2:** *(Screenshot — Wireshark window showing loaded dns.pcap file)*
+
 
 ---
 
-### Step 1 — Setting Up Wireshark and Starting a Capture
-
-Launch Wireshark and select the active network interface (typically `eth0` or `Ethernet`). Click the blue shark fin icon to begin capturing live traffic. At this stage, all network activity on the selected interface is being recorded in real time.
-
-> **Ref 1:** *(Screenshot — Wireshark interface selection screen showing available network adapters with packet activity indicators)*
-
-**Key actions:**
-- Select the correct interface based on where traffic is expected
-- Confirm packets are flowing by watching the packet count increment
-- Leave capture running before triggering protocol-specific traffic in the steps below
-
----
-
-### Step 2 — DNS Traffic Analysis
+###  DNS Traffic Analysis
 
 **What is DNS?**
 DNS (Domain Name System) translates human-readable domain names (e.g. `google.com`) into IP addresses. Every website visit, email, and many malware callbacks start with a DNS query. DNS is a critical protocol for SOC analysts because it can reveal suspicious domain lookups, command-and-control (C2) beaconing, and data exfiltration attempts.
