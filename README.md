@@ -1,6 +1,6 @@
 ## Objective
 
-This project demonstrates hands-on network traffic analysis using Wireshark in a controlled lab environment. The primary goal was to filter and interpret captured traffic across key protocols — DNS, HTTP, and HTTPS — to identify normal baseline behaviour, detect anomalies, and recognise indicators of malicious activity. This exercise strengthens core SOC analyst skills by bridging the gap between raw packet data and actionable security insights.
+This project demonstrates hands-on network traffic analysis using Wireshark in a controlled lab environment. The primary goal was to filter and interpret captured traffic across key protocols — DNS and HTTP — to identify normal baseline behaviour, detect anomalies, and recognise indicators of malicious activity. This exercise strengthens core SOC analyst skills by bridging the gap between raw packet data and actionable security insights.
 
 ---
 
@@ -9,8 +9,7 @@ This project demonstrates hands-on network traffic analysis using Wireshark in a
 - Deep understanding of network packet structure and how data flows across the OSI model
 - Proficiency in applying Wireshark display filters to isolate specific protocols and traffic patterns
 - Ability to reconstruct and analyse DNS queries and responses to detect suspicious lookups and potential exfiltration
-- Understanding of HTTP request/response cycles and the ability to extract credentials, file transfers, and session tokens from unencrypted traffic
-- Ability to analyse HTTPS/TLS handshakes, identify certificate details, and detect anomalous encrypted traffic patterns
+- Understanding of HTTP user-agent string field, by differenting non-standard/anomalous user-agent from normal ones 
 - Development of critical thinking and pattern recognition skills for identifying malicious traffic in a SOC context
 - Proficiency in documenting findings for escalation and reporting
 
@@ -58,7 +57,7 @@ After applying dns as filter, the number of displayed packet reduced to 30370 as
 <img width="1286" height="751" alt="Screenshot 2026-06-02 at 13 21 32" src="https://github.com/user-attachments/assets/2c17e0a3-57dc-43ed-bf17-e0c2f2d2e98a" />
 
 > **Image 3:** *(Screenshot — Wireshark window showing apllied dns filter)*
->
+
 
 
 
@@ -89,144 +88,69 @@ Then, I decided to use another filter (dns.qry.name.len > 200 and !mdns) to conf
 
 ---
 
-### Step 4 — HTTP Traffic Analysis
+### HTTP Traffic Analysis
 
-**What is HTTP?**
-HTTP (HyperText Transfer Protocol) is an unencrypted protocol used for web communication. Because HTTP traffic is transmitted in plaintext, Wireshark can capture and display the full contents of requests and responses — including credentials, form data, cookies, and file transfers.
+HTTP (HyperText Transfer Protocol) is an unencrypted protocol used for web communication. Because HTTP traffic is transmitted in plaintext, Wireshark can display the full contents of requests and responses — including credentials, form data, cookies, and file transfers.
+For http traffic analysis, another pcap file(user-agent.pcap) was loaded on wireshark as show in Image 6;
 
-**Generating HTTP traffic:**
-On the Windows VM, open a browser or Command Prompt and run:
-```
-curl http://testphp.vulnweb.com
-curl http://neverssl.com
-```
-Or navigate to any `http://` website in a browser.
+<img width="1286" height="751" alt="Screenshot 2026-06-02 at 14 56 14" src="https://github.com/user-attachments/assets/67e264c8-a147-4793-82d5-092635d3de53" />
+
+> **Image 6:** *(Screenshot — Wireshark window showing loaded user-agent.pcap file)*
+
 
 **Wireshark filter to isolate HTTP:**
 ```
 http
 ```
 
+After applying http as filter, the number of displayed packet reduced to 48 as depicted in the Image 7 below;
+
+<img width="1286" height="751" alt="Screenshot 2026-06-02 at 15 00 25" src="https://github.com/user-attachments/assets/7f3b9008-e72c-485d-9e40-79cb741a587f" />
+
+> **Image 7:** *(Screenshot — Wireshark window showing applied http filter)*
+
 **What to look for:**
-- **GET requests** — client requesting a webpage or resource
-- **POST requests** — client submitting data (login forms, file uploads) — POST bodies are visible in plaintext
-- **HTTP 200 OK** — successful response
-- **HTTP 401 Unauthorized / 403 Forbidden** — access denied — could indicate brute force or credential testing
-- **HTTP 302 Redirect** — server redirecting client — can be used in phishing redirects
-- **Credentials in plaintext** — visible in POST request body (e.g. `username=admin&password=password123`)
+- **Analomous User-agents** — malicious user-agent masking as a normal/harmless user-agent
 
-**Extracting HTTP content:**
-In Wireshark, right-click a HTTP packet → Follow → HTTP Stream to see the full request and response in plain text.
+In this investigation, the "user-agent" field is the focal point used for spotting anomaly in HTTP traffic. Attackers usally craft some user-agents to make it look natural and bypass security. After laoding the pcap file in wireshark, "http.user_agent" filter was applied to discover anomalous user-agent as shown in Image 8.
 
-> **Ref 6:** *(Screenshot — Wireshark HTTP filter applied showing GET and POST requests with destination IP, URL path, and HTTP method visible in the Info column)*
+<img width="1286" height="751" alt="Screenshot 2026-06-02 at 16 07 06" src="https://github.com/user-attachments/assets/0848b135-b81f-4ba2-8288-4f28ccde9bbf" />
 
-> **Ref 7:** *(Screenshot — HTTP stream follow showing a plaintext POST request body containing form data including username and password fields)*
+> **Image 8:** *(Screenshot — Wireshark window showing applied http.user_agent filter)*
 
-**SOC relevance:** Any credentials, session tokens, or sensitive data transmitted over HTTP are visible to anyone on the network segment. HTTP is increasingly rare on legitimate sites — HTTP traffic to internal or unusual destinations should be investigated as a potential data exfiltration or C2 channel.
+Then, I browsed through the user_agent column to discover any suspicious looking user-agent strings. While browsing through the user-agent column, I stumble on 3 different user-agent strings that caught my attention- they are;
+- **Mozilla/5.0 (Windows; U; Windows NT 6.4; en-US) AppleWebKit/534.10 (KHTML, like Gecko) Chrome/8.0.552.237 Safari/534.10**
 
----
+At a glance, it might look like a standard browser identifier. However, it contains a glaring logical error: it pairs a browser version from 2010 (Chrome/8.0) with a Windows OS preview from 2014 (Windows NT 6.4). A real user's browser would never organically produce this combination.
+- **Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)**
 
-### Step 5 — HTTPS and TLS Traffic Analysis
+The second weird user-agent string is the default User-Agent used by the Nmap Scripting Engine (NSE). Upon research, this indicates a network scanning was being conducted against the web server.
+- **Wfuzz/2.4**
 
-**What is HTTPS/TLS?**
-HTTPS (HTTP Secure) encrypts web traffic using TLS (Transport Layer Security). While the content of HTTPS traffic cannot be read directly, Wireshark can capture and analyse the TLS handshake — which reveals the encryption protocol version, cipher suites, and server certificate details — without decrypting the payload.
+The last user-agent string discovered is the default User-Agent signature for Wfuzz, a popular web application vulnerability scanner and directory bruteforcing tool. This indicates an attacker performed automated-testing the web server to discover hidden files, directories, or login pages.
+  
 
-**Generating HTTPS traffic:**
-On the Windows VM, open a browser and navigate to:
-```
-https://www.google.com
-https://www.microsoft.com
-```
-
-**Wireshark filter to isolate TLS/HTTPS:**
-```
-tls
-```
-or to filter by port:
-```
-tcp.port == 443
-```
-
-**What to look for in the TLS Handshake:**
-| Packet | Direction | Description |
-|--------|-----------|-------------|
-| Client Hello | Client → Server | Proposes TLS version and cipher suites |
-| Server Hello | Server → Client | Selects TLS version and cipher suite |
-| Certificate | Server → Client | Server presents its SSL certificate |
-| Client Key Exchange | Client → Server | Establishes session key |
-| Application Data | Both | Encrypted payload (not readable) |
-
-**Analysing the TLS Certificate:**
-Click the Certificate packet → Expand `Transport Layer Security` → `Handshake Protocol` → `Certificate` to see:
-- **Subject** — who the certificate belongs to
-- **Issuer** — the Certificate Authority that signed it
-- **Validity period** — check for expired certificates
-- **Subject Alternative Names (SANs)** — domains covered by the certificate
-
-**Detecting suspicious TLS traffic:**
-- **Self-signed certificates** — legitimate sites use trusted CA-signed certificates
-- **Expired certificates** — potential misconfiguration or attacker using old infrastructure
-- **Unusual cipher suites** — old or weak ciphers (e.g. TLS 1.0, RC4) indicate outdated or malicious servers
-- **TLS on non-standard ports** — C2 traffic often uses HTTPS on ports other than 443 to avoid detection
-
-> **Ref 8:** *(Screenshot — Wireshark TLS filter applied showing Client Hello, Server Hello, Certificate, and Application Data packets in the capture)*
-
-> **Ref 9:** *(Screenshot — TLS Certificate packet expanded in the packet details pane showing Subject, Issuer, Validity dates, and Subject Alternative Names)*
-
-> **Ref 10:** *(Screenshot — Wireshark showing TLS Application Data packets — demonstrating that payload is encrypted and not readable, unlike HTTP)*
-
-**SOC relevance:** While HTTPS protects data in transit, encrypted traffic is increasingly used by malware to hide C2 communications. SOC analysts should flag TLS traffic with self-signed certificates, unusual cipher suites, or connections to newly registered domains — even if the payload cannot be read.
+**SOC relevance:** Non-standard and custom user agent, audit tools (Nmap and Wfuzz) in the user-agent field info should be immediately flagged and escalated for further investigation
 
 ---
 
-### Step 6 — Identifying Suspicious Traffic and Building a Summary Report
 
-After capturing all protocol traffic, apply combined filters to identify anomalies:
-
-**Filter for DNS + suspicious domains:**
-```
-dns && dns.qry.name contains "xyz"
-```
-
-**Filter for unencrypted HTTP POST (potential credential leak):**
-```
-http.request.method == "POST"
-```
-
-**Filter for TLS with self-signed certificates:**
-```
-tls.handshake.type == 11
-```
-
-**Filter for DHCP anomalies (multiple offers):**
-```
-dhcp.option.dhcp == 2
-```
-
-> **Ref 11:** *(Screenshot — Wireshark with combined filters applied, showing a filtered view of suspicious DNS queries and HTTP POST requests isolated from normal traffic)*
+---
 
 **Summary findings table:**
 
 | Protocol | Observation | Severity | Action |
 |----------|-------------|----------|--------|
-| DNS | NXDOMAIN responses to random-looking domains | Medium | Investigate domain reputation |
-| DNS | High-volume subdomains to single domain | High | Escalate — potential DNS tunnelling |
-| DHCP | Multiple DHCP Offers from different MACs | High | Escalate — potential rogue DHCP |
-| HTTP | Plaintext POST with credential data | High | Escalate — data exposure risk |
-| HTTPS | Self-signed certificate on port 443 | Medium | Investigate server and destination |
-| HTTPS | TLS 1.0 detected | Low | Flag for remediation |
-
-> **Ref 12:** *(Screenshot — Completed Wireshark capture summary showing packet statistics — total packets, protocol breakdown, and capture duration — via Statistics → Protocol Hierarchy)*
+| DNS | High-volume long subdomains address to single domain | High | Escalate — potential DNS tunnelling |
+| HTTP | Non-standard user-agent strings | High | Escalate — data exposure risk and scanning detected |
 
 ---
 
 ## Key Takeaways
 
 - DNS is the most valuable protocol for early threat detection — monitoring query patterns reveals C2 beaconing, tunnelling, and exfiltration before other indicators appear
-- HTTP remains a significant risk in internal environments — plaintext credentials and data are easily captured by any analyst (or attacker) on the same network segment
-- HTTPS traffic analysis focuses on the TLS handshake, not the payload — certificate anomalies and unusual cipher suites are the primary indicators of malicious encrypted traffic
-- DHCP anomalies are often overlooked but can indicate serious man-in-the-middle attacks — rogue DHCP servers are a classic network pivot technique
-- Every finding should be documented with packet reference numbers, timestamps, source/destination IPs, and a clear escalation recommendation
+- HTTP remains a significant risk in internal environments — Custom/anomalous user-agent strings could indicate network scanning 
+
 
 ---
 
@@ -236,5 +160,4 @@ dhcp.option.dhcp == 2
 - [MITRE ATT&CK — T1071 Application Layer Protocol](https://attack.mitre.org/techniques/T1071/)
 - [MITRE ATT&CK — T1568 DNS for C2](https://attack.mitre.org/techniques/T1568/)
 - [RFC 1035 — DNS Protocol Specification](https://www.rfc-editor.org/rfc/rfc1035)
-- [RFC 2131 — DHCP Protocol Specification](https://www.rfc-editor.org/rfc/rfc2131)
 - [TryHackMe — Wireshark Labs](https://tryhackme.com/room/wireshark101)
