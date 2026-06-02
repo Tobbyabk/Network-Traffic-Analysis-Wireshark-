@@ -9,49 +9,25 @@ This project demonstrates hands-on network traffic analysis using Wireshark in a
 - Deep understanding of network packet structure and how data flows across the OSI model
 - Proficiency in applying Wireshark display filters to isolate specific protocols and traffic patterns
 - Ability to reconstruct and analyse DNS queries and responses to detect suspicious lookups and potential exfiltration
-- Ability to interpret DHCP handshakes and identify rogue DHCP server activity or IP conflicts
 - Understanding of HTTP request/response cycles and the ability to extract credentials, file transfers, and session tokens from unencrypted traffic
 - Ability to analyse HTTPS/TLS handshakes, identify certificate details, and detect anomalous encrypted traffic patterns
 - Development of critical thinking and pattern recognition skills for identifying malicious traffic in a SOC context
-- Proficiency in exporting packet captures (PCAPs) and documenting findings for escalation and reporting
+- Proficiency in documenting findings for escalation and reporting
 
 ---
 
 ## Tools Used
 
-- **Wireshark** — primary tool for packet capture and protocol-level traffic analysis
-- **Windows 10 VM** — endpoint generating DNS, DHCP, HTTP, and HTTPS traffic
-- **Kali Linux VM** — used for simulating attack traffic and running network tools
-- **nslookup / dig** — for generating and validating DNS queries during analysis
-- **curl / browser** — for generating HTTP and HTTPS traffic for capture
-- **ipconfig /release & /renew** — for triggering DHCP handshake captures
-- **Microsoft Sentinel / Splunk** (optional integration) — for ingesting PCAP findings into SIEM for correlation
+- **Wireshark** — primary tool for packet and protocol-level traffic analysis
+- **Ubuntu Linux VM** — used for running network tools
+- **PCAP**— captured packet ingested into wireshark
 
 ---
 
 ## Lab Setup
+This investigation was carried out in a virtual environment using TryHackMe platform. The VM was launched on on TryHackMe and it took about 2 minutes for it to spin up. The capture packet required for this investigation was already provided in the VM and there was no need for a live-traffic capture. The Ubuntu version of the VM and the PCAP file are depicted below on the left and right side of the screenshot respectively.
 
-```
-┌─────────────────────────────────────────────────┐
-│                  Lab Environment                 │
-│                                                 │
-│  ┌──────────────┐        ┌──────────────────┐   │
-│  │ Windows 10   │        │   Kali Linux     │   │
-│  │ (Target VM)  │◄──────►│   (Attacker VM)  │   │
-│  │ 192.168.1.10 │        │  192.168.1.20    │   │
-│  └──────┬───────┘        └──────────────────┘   │
-│         │                                       │
-│  ┌──────▼───────┐        ┌──────────────────┐   │
-│  │    Router/   │        │   DNS Server     │   │
-│  │   Gateway    │◄──────►│   192.168.1.1    │   │
-│  │ 192.168.1.1  │        └──────────────────┘   │
-│  └──────────────┘                               │
-│                                                 │
-│         Wireshark capturing on eth0             │
-└─────────────────────────────────────────────────┘
-```
 
----
 
 ## Steps
 
